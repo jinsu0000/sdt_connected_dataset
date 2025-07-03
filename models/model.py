@@ -4,7 +4,8 @@ import torchvision.models as models
 from models.transformer import *
 from models.encoder import Content_TR
 from einops import rearrange, repeat
-from models.gmm import get_seq_from_gmm
+from utils.logger import print_once, log_stats
+from models.gmm import get_seq_from_gmm, get_seq_from_gmm_with_sigma
 
 '''
 the overall architecture of our style-disentangled Transformer (SDT).
@@ -78,11 +79,13 @@ class SDT_Generator(nn.Module):
 
     # the shape of style_imgs is [B, 2*N, C, H, W] during training
     def forward(self, style_imgs, seq, char_img):
+        print_once("SDT_Generator::forward, style_imgs:", style_imgs.shape)
         batch_size, num_imgs, in_planes, h, w = style_imgs.shape
 
         # style_imgs: [B, 2*N, C:1, H, W] -> FEAT_ST_ENC: [4*N, B, C:512]
         style_imgs = style_imgs.view(-1, in_planes, h, w)  # [B*2N, C:1, H, W]
         style_embe = self.Feat_Encoder(style_imgs)  # [B*2N, C:512, 2, 2]
+        print_once("SDT_Generator::forward Feat_Encoder_ResNet output:", style_embe.shape)  
 
         anchor_num = num_imgs//2
         style_embe = style_embe.view(batch_size*num_imgs, 512, -1).permute(2, 0, 1)  # [4, B*2N, C:512]
@@ -97,7 +100,7 @@ class SDT_Generator(nn.Module):
         glyph_memory = rearrange(glyph_memory, 't (b p n) c -> t (p b) n c',
                            b=batch_size, p=2, n=anchor_num)  # [4, 2*B, N, C]
 
-        # writer-nce
+        # writer NCE: [4, 2B, N, C] -> [4N, 2B, C]
         memory_fea = rearrange(writer_memory, 't b n c ->(t n) b c')  # [4*N, 2*B, C]
         compact_fea = torch.mean(memory_fea, 0) # [2*B, C]
         # compact_fea:[2*B, C:512] ->  nce_emb: [B, 2, C:128]
@@ -106,11 +109,15 @@ class SDT_Generator(nn.Module):
         pos_emb = pro_emb[batch_size:, :]
         nce_emb = torch.stack((query_emb, pos_emb), 1) # [B, 2, C]
         nce_emb = nn.functional.normalize(nce_emb, p=2, dim=2)
+        print_once("SDT_Generator::forward [writer] NCE memory_fea:", memory_fea.shape, ", compact_fea:", compact_fea.shape)
+        print_once("SDT_Generator::forward [writer] NCE pro_emb:", pro_emb.shape, ", query_emb:", query_emb.shape)
+        print_once("SDT_Generator::forward [writer] NCE nce_emb:", nce_emb.shape)
 
         # glyph-nce
         patch_emb = glyph_memory[:, :batch_size]  # [4, B, N, C]
         # sample the positive pair
         anc, positive = self.random_double_sampling(patch_emb)
+        print_once("SDT_Generator::forward [glyph] random_double_sampling result anc:", anc.shape, ", positive:", positive.shape)
         n_channels = anc.shape[-1]
         anc = anc.reshape(batch_size, -1, n_channels)
         anc_compact = torch.mean(anc, 1, keepdim=True) 
@@ -119,6 +126,7 @@ class SDT_Generator(nn.Module):
         positive_compact = torch.mean(positive, 1, keepdim=True)
         positive_compact = self.pro_mlp_character(positive_compact) # [B, 1, C]
 
+        print_once("SDT_Generator::forward [glyph] NCE anc_compact:", anc_compact.shape, ", positive_compact:", positive_compact.shape)
         nce_emb_patch = torch.cat((anc_compact, positive_compact), 1) # [B, 2, C]
         nce_emb_patch = nn.functional.normalize(nce_emb_patch, p=2, dim=2)
 
@@ -149,12 +157,16 @@ class SDT_Generator(nn.Module):
 
     # style_imgs: [B, N, C, H, W]
     def inference(self, style_imgs, char_img, max_len):
+        print_once("SDT_Generator::inference style_imgs:", style_imgs.shape)
         batch_size, num_imgs, in_planes, h, w = style_imgs.shape
         # [B, N, C, H, W] -> [B*N, C, H, W]
         style_imgs = style_imgs.view(-1, in_planes, h, w)
+        print_once("SDT_Generator::inference style_imgs.view():", style_imgs.shape)
         # [B*N, 1, 64, 64] -> [B*N, 512, 2, 2]
         style_embe = self.Feat_Encoder(style_imgs)
+        print_once("SDT_Generator::inference Feat_Encoder_ResNet output:", style_embe.shape)
         FEAT_ST = style_embe.reshape(batch_size*num_imgs, 512, -1).permute(2, 0, 1)  # [4, B*N, C]
+        print_once("SDT_Generator::inference FEAT_ST:", FEAT_ST.shape)
         FEAT_ST_ENC = self.add_position(FEAT_ST)  # [4, B*N, C:512]
         memory = self.base_encoder(FEAT_ST_ENC)  # [5, B*N, C]
         memory_writer = self.writer_head(memory)  # [4, B*N, C]

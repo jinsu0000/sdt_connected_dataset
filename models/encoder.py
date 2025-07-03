@@ -3,6 +3,7 @@ import torch.nn as nn
 import torchvision.models as models
 from models.transformer import *
 from einops import rearrange
+from utils.logger import print_once
 
 ### content encoder
 class Content_TR(nn.Module):
@@ -18,6 +19,7 @@ class Content_TR(nn.Module):
         self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, norm=encoder_norm)
 
     def forward(self, x):
+        print_once("Content_TR:: Feat_Encoder input:", x.shape)
         x = self.Feat_Encoder(x)
         #x = self.recti_channel(x)
         x = rearrange(x, 'n c h w -> (h w) n c')

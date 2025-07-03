@@ -1,4 +1,4 @@
-name: test
+name: sdt_connected_dataset
 channels:
   - pytorch
   - nvidia
@@ -84,6 +84,16 @@ dependencies:
   - zlib=1.2.13=h5eee18b_1
   - zstd=1.5.5=hc292b87_2
   - pip:
+    - timm
+    - six
+    - pyyaml
+    - tensorboardX
+    - tensorboard
+    - fastdtw
+    - ptflops
+    - matplotlib
+    - scikit-learn
+    - seaborn
     - easydict==1.13
     - einops==0.8.0
     - lmdb==1.5.1

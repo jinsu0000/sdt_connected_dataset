@@ -26,20 +26,34 @@ class ScriptDataset(Dataset):
     def __init__(self, root='data', dataset='CHINESE', is_train=True, num_img = 15):
         data_path = os.path.join(root, script[dataset][0])
         self.dataset = dataset
-        self.content = pickle.load(open(os.path.join(data_path, script[dataset][1]), 'rb')) #content samples
-        self.char_dict = pickle.load(open(os.path.join(data_path, 'character_dict.pkl'), 'rb'))
-        self.all_writer = pickle.load(open(os.path.join(data_path, 'writer_dict.pkl'), 'rb'))
+        content_path = os.path.join(data_path, script[dataset][1])
+        if os.path.exists(content_path):
+            self.content = pickle.load(open(content_path, 'rb')) #content samples
+
+        char_path = os.path.join(data_path, 'character_dict.pkl')
+        if os.path.exists(char_path):
+            self.char_dict = pickle.load(open(char_path, 'rb'))
+        #*# char_dict : 문자 - 인덱스 Mapping Dictionary
+        
+        writer_path = os.path.join(data_path, 'writer_dict.pkl')
+        if os.path.exists(writer_path):
+            self.all_writer = pickle.load(open(writer_path, 'rb'))
+        #*# all_writer : 작가의 인덱스 Dictionary
         self.is_train = is_train
         if self.is_train:
             lmdb_path = os.path.join(data_path, 'train') # online characters
+            # lmdb : Lightning Memory-Mapped Database (빠름), 필기 궤적 등 저장
             self.img_path = os.path.join(data_path, 'train_style_samples') # style samples
             self.num_img = num_img*2
-            self.writer_dict = self.all_writer['train_writer']
+            #*# contrastive learning (NCE loss)을 위한 positive pair 구성을 위해서 절반은 Anchor, 절반은 Positive로 사용한다.
+            if os.path.exists(writer_path):
+                self.writer_dict = self.all_writer['train_writer']
         else:
             lmdb_path = os.path.join(data_path, 'test') # online characters
             self.img_path = os.path.join(data_path, 'test_style_samples') # style samples
             self.num_img = num_img
-            self.writer_dict = self.all_writer['test_writer']
+            if os.path.exists(writer_path):
+                self.writer_dict = self.all_writer['test_writer']
         if not os.path.exists(lmdb_path):
             raise IOError("input the correct lmdb path")
         

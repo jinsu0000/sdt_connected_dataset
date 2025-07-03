@@ -33,6 +33,11 @@ def main(opt):
             gly_dec_layers= cfg.MODEL.GLY_DEC_LAYERS).to('cuda')
     if len(opt.pretrained_model) > 0:
         model_weight = torch.load(opt.pretrained_model)
+        if isinstance(model_weight, dict) and 'model' in model_weight:
+            model.load_state_dict(model_weight['model'])
+        else:
+            model.load_state_dict(model_weight)
+        #model.load_state_dict(model_weight)
         model.load_state_dict(model_weight)
         print('load pretrained model from {}'.format(opt.pretrained_model))
     else:

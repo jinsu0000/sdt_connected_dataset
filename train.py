@@ -5,6 +5,9 @@ from models.loss import SupConLoss, get_pen_loss
 from models.model import SDT_Generator
 from utils.logger import set_log
 from data_loader.loader import ScriptDataset
+import argparse
+import os
+import re
 import torch
 from trainer.trainer import Trainer
 
@@ -41,21 +44,38 @@ def main(opt):
             num_head_layers= cfg.MODEL.NUM_HEAD_LAYERS,
             wri_dec_layers=cfg.MODEL.WRI_DEC_LAYERS,
             gly_dec_layers= cfg.MODEL.GLY_DEC_LAYERS).to('cuda')
+    model = torch.nn.DataParallel(model).cuda()
+    optimizer = torch.optim.Adam(model.module.parameters(), lr=cfg.SOLVER.BASE_LR)
+    start_checkpoint_step = 0
+
     ### load checkpoint
     if len(opt.pretrained_model) > 0:
-        model.load_state_dict(torch.load(opt.pretrained_model))
         print('load pretrained model from {}'.format(opt.pretrained_model))
+        state_dict = torch.load(opt.pretrained_model)
+
+        # 모델 + 옵티마이저 + step 복원
+        if 'model' in state_dict:
+            model.load_state_dict(state_dict['model'])
+        else:
+            model.load_state_dict(state_dict)  # fallback: 모델만 있을 때
+
+        if 'optimizer' in state_dict:
+            optimizer.load_state_dict(state_dict['optimizer'])
+
+        if 'step' in state_dict:
+            start_checkpoint_step = state_dict['step']
+            print(f"[Resume] Resuming from step {start_checkpoint_step}")
     elif len(opt.content_pretrained) > 0:
-        model_dict = load_specific_dict(model.content_encoder, opt.content_pretrained, "feature_ext")
-        model.content_encoder.load_state_dict(model_dict)
+        model_dict = load_specific_dict(model.module.content_encoder, opt.content_pretrained, "feature_ext")
+        model.module.content_encoder.load_state_dict(model_dict)
         print('load content pretrained model from {}'.format(opt.content_pretrained))
     else:
         pass
     criterion = dict(NCE=SupConLoss(contrast_mode='all'), PEN=get_pen_loss)
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.SOLVER.BASE_LR)
+
     """start training iterations"""
     trainer = Trainer(model, criterion, optimizer, train_loader, logs, char_dict, test_loader)
-    trainer.train()
+    trainer.train(start_step=start_checkpoint_step)
 
 if __name__ == '__main__':
     """Parse input arguments"""

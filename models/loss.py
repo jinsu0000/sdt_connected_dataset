@@ -94,7 +94,7 @@ class SupConLoss(nn.Module):
 
 """pen moving prediction and pen state classification losses"""
 def get_pen_loss(z_pi, z_mu1, z_mu2, z_sigma1, z_sigma2, z_corr, z_pen_logits, x1_data, x2_data,
-                 pen_data):
+                 pen_data, step=None):
     result0 = tf_2d_normal(x1_data, x2_data, z_mu1, z_mu2, z_sigma1, z_sigma2, z_corr)
     epsilon = 1e-10
     # result1 is the loss wrt pen offset
@@ -108,6 +108,19 @@ def get_pen_loss(z_pi, z_mu1, z_mu2, z_sigma1, z_sigma2, z_corr, z_pen_logits, x
     result1 = torch.multiply(result1, fs)
     loss_fn = torch.nn.CrossEntropyLoss()
     result2 = loss_fn(z_pen_logits, torch.argmax(pen_data, -1))
+
+    # ✅ 디버깅 출력 (원본 구조 유지)
+    if step is not None and step % 1000 == 0:
+        print(f"[Step {step}] --- GMM Debug ---")
+        print(f"  NLL loss (mean): {result1.mean().item():.4f}")
+        print(f"  pen state loss : {result2.item():.4f}")
+        print(f"  result0 max pdf: {result0.max().item():.4f}")
+        print(f"  result1 avg pre-log: {(torch.sum(result0 * z_pi, 1)).mean().item():.4f}")
+        print(f"  z_pi max: {z_pi.max().item():.4f}, mean: {z_pi.mean().item():.4f}")
+        print(f"  sigma1 min/max: {z_sigma1.min().item():.4f}/{z_sigma1.max().item():.4f}")
+        print(f"  sigma2 min/max: {z_sigma2.min().item():.4f}/{z_sigma2.max().item():.4f}")
+        print(f"  corr range: {z_corr.min().item():.4f} ~ {z_corr.max().item():.4f}")
+
     return result1, result2 # result1: pen offset loss, result2: category loss
 
 """Normal distribution"""

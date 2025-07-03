@@ -14,9 +14,14 @@ def main(opt):
     cfg_from_file(opt.cfg_file)
     assert_and_infer_cfg()
 
+    """setup device"""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"[INFO] Using device: {device}")
+
     """setup data_loader instances"""
     test_dataset = ScriptDataset(
        cfg.DATA_LOADER.PATH, cfg.DATA_LOADER.DATASET, cfg.TEST.ISTRAIN, cfg.MODEL.NUM_IMGS)
+    print('number of test images: ', len(test_dataset))
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=cfg.TRAIN.IMS_PER_BATCH,
                                               shuffle=True,
@@ -36,10 +41,29 @@ def main(opt):
     model = SDT_Generator(num_encoder_layers=cfg.MODEL.ENCODER_LAYERS,
             num_head_layers= cfg.MODEL.NUM_HEAD_LAYERS,
             wri_dec_layers=cfg.MODEL.WRI_DEC_LAYERS,
-            gly_dec_layers= cfg.MODEL.GLY_DEC_LAYERS).to('cuda')
+            gly_dec_layers= cfg.MODEL.GLY_DEC_LAYERS).to(device)
     if len(opt.pretrained_model) > 0:
-        model_weight = torch.load(opt.pretrained_model)
-        model.load_state_dict(model_weight)
+        print('load pretrained model from {}'.format(opt.pretrained_model))
+        model_weight = torch.load(opt.pretrained_model, map_location=device)
+
+        if isinstance(model_weight, dict) and 'model' in model_weight:
+            model_state_dict = model_weight['model']
+            print(f"Type of checkpoint['model']: {type(model_state_dict)}")
+
+            # model_state_dict 안의 key 몇 개만 출력
+            for i, key in enumerate(model_state_dict.keys()):
+                if i >= 10:
+                    break
+                print(f"{i}: {key}")
+
+            new_state_dict = {}
+            for k, v in model_state_dict.items():
+                new_key = k.replace('module.', '') if k.startswith('module.') else k
+                new_state_dict[new_key] = v
+            model.load_state_dict(new_state_dict)
+        else:
+            model.load_state_dict(model_weight)
+        #model.load_state_dict(model_weight)
         print('load pretrained model from {}'.format(opt.pretrained_model))
     else:
         raise IOError('input the correct checkpoint path')
@@ -53,6 +77,7 @@ def main(opt):
 
     batch_num, num_count= 0, 0
     data_iter = iter(test_loader)
+    # tqdm : 진행률 프로그레스바바
     with torch.no_grad():
         for _ in tqdm.tqdm(range(batch_samples)):
             batch_num += 1
@@ -61,15 +86,15 @@ def main(opt):
             else:
                 data = next(data_iter)
                 # prepare input
-                coords, coords_len, character_id, writer_id, img_list, char_img = data['coords'].cuda(), \
-                    data['coords_len'].cuda(), \
-                    data['character_id'].long().cuda(), \
-                    data['writer_id'].long().cuda(), \
-                    data['img_list'].cuda(), \
-                    data['char_img'].cuda()
+                coords, coords_len, character_id, writer_id, img_list, char_img = data['coords'].to(device), \
+                    data['coords_len'].to(device), \
+                    data['character_id'].long().to(device), \
+                    data['writer_id'].long().to(device), \
+                    data['img_list'].to(device), \
+                    data['char_img'].to(device)
                 preds = model.inference(img_list, char_img, 120)
                 bs = character_id.shape[0]
-                SOS = torch.tensor(bs * [[0, 0, 1, 0, 0]]).unsqueeze(1).to(preds)
+                SOS = torch.tensor(bs * [[0, 0, 1, 0, 0]], device=device).unsqueeze(1).to(preds)
                 preds = torch.cat((SOS, preds), 1)  # add the SOS token like GT
                 preds = preds.detach().cpu().numpy()
 
