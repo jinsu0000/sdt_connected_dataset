@@ -1,0 +1,10 @@
+__pycache__
+data/*
+Saved/*
+model_zoo/*.pth
+auto_*
+.vscode
+Generated
+style_samples
+*.log           # 학습 로그
+
