@@ -81,59 +81,79 @@ class SDT_Generator(nn.Module):
     def forward(self, style_imgs, seq, char_img):
         print_once("SDT_Generator::forward, style_imgs:", style_imgs.shape)
         batch_size, num_imgs, in_planes, h, w = style_imgs.shape
-
+        print_once("SDT_Generator::forward, batch_size:", batch_size, ", num_imgs:", num_imgs, ", in_planes:", in_planes, ", h:", h, ", w:", w)
+        
         # style_imgs: [B, 2*N, C:1, H, W] -> FEAT_ST_ENC: [4*N, B, C:512]
         style_imgs = style_imgs.view(-1, in_planes, h, w)  # [B*2N, C:1, H, W]
+        print_once("SDT_Generator::forward style_imgs.view():", style_imgs.shape)
         style_embe = self.Feat_Encoder(style_imgs)  # [B*2N, C:512, 2, 2]
         print_once("SDT_Generator::forward Feat_Encoder_ResNet output:", style_embe.shape)  
 
         anchor_num = num_imgs//2
         style_embe = style_embe.view(batch_size*num_imgs, 512, -1).permute(2, 0, 1)  # [4, B*2N, C:512]
+        print_once("SDT_Generator::forward style_embe.view():", style_embe.shape)
         FEAT_ST_ENC = self.add_position(style_embe)
 
         memory = self.base_encoder(FEAT_ST_ENC)  # [4, B*2N, C]
+        print_once("SDT_Generator::forward base_encoder output memory:", memory.shape)
         writer_memory = self.writer_head(memory)
         glyph_memory = self.glyph_head(memory)
+        print_once("SDT_Generator::forward WRITER memory:", writer_memory.shape, ", GLYPH memory:", glyph_memory.shape)
 
         writer_memory = rearrange(writer_memory, 't (b p n) c -> t (p b) n c',
                            b=batch_size, p=2, n=anchor_num)  # [4, 2*B, N, C]
         glyph_memory = rearrange(glyph_memory, 't (b p n) c -> t (p b) n c',
                            b=batch_size, p=2, n=anchor_num)  # [4, 2*B, N, C]
+        print_once("SDT_Generator::forward rearrange writer_memory:", writer_memory.shape, ", glyph_memory:", glyph_memory.shape)
 
         # writer NCE: [4, 2B, N, C] -> [4N, 2B, C]
         memory_fea = rearrange(writer_memory, 't b n c ->(t n) b c')  # [4*N, 2*B, C]
+
         compact_fea = torch.mean(memory_fea, 0) # [2*B, C]
+        print_once("SDT_Generator::forward [writer] memory_fea:", memory_fea.shape, ", compact_fea:", compact_fea.shape)
         # compact_fea:[2*B, C:512] ->  nce_emb: [B, 2, C:128]
         pro_emb = self.pro_mlp_writer(compact_fea)
+        print_once("SDT_Generator::forward [writer] pro_emb:", pro_emb.shape)
         query_emb = pro_emb[:batch_size, :]
+        print_once("SDT_Generator::forward [writer] query_emb:", query_emb.shape)
         pos_emb = pro_emb[batch_size:, :]
+        print_once("SDT_Generator::forward [writer] pos_emb:", pos_emb.shape)
         nce_emb = torch.stack((query_emb, pos_emb), 1) # [B, 2, C]
+        print_once("SDT_Generator::forward [writer] nce_emb:", nce_emb.shape)
         nce_emb = nn.functional.normalize(nce_emb, p=2, dim=2)
-        print_once("SDT_Generator::forward [writer] NCE memory_fea:", memory_fea.shape, ", compact_fea:", compact_fea.shape)
-        print_once("SDT_Generator::forward [writer] NCE pro_emb:", pro_emb.shape, ", query_emb:", query_emb.shape)
-        print_once("SDT_Generator::forward [writer] NCE nce_emb:", nce_emb.shape)
+        print_once("SDT_Generator::forward [writer] normalize NCE nce_emb:", nce_emb.shape)
 
         # glyph-nce
         patch_emb = glyph_memory[:, :batch_size]  # [4, B, N, C]
+        print_once("SDT_Generator::forward [glyph] patch_emb:", patch_emb.shape)
         # sample the positive pair
         anc, positive = self.random_double_sampling(patch_emb)
-        print_once("SDT_Generator::forward [glyph] random_double_sampling result anc:", anc.shape, ", positive:", positive.shape)
         n_channels = anc.shape[-1]
+        print_once("SDT_Generator::forward [glyph] random_double_sampling result anc:", anc.shape, ", positive:", positive.shape, ", n_channels:", n_channels)
         anc = anc.reshape(batch_size, -1, n_channels)
-        anc_compact = torch.mean(anc, 1, keepdim=True) 
+        print_once("SDT_Generator::forward [glyph] anc reshape:", anc.shape)
+        anc_compact = torch.mean(anc, 1, keepdim=True)
+        print_once("SDT_Generator::forward [glyph] anc_compact:", anc_compact.shape)
         anc_compact = self.pro_mlp_character(anc_compact) # [B, 1, C]
+        print_once("SDT_Generator::forward [glyph] anc_compact after pro_mlp_character:", anc_compact.shape)
         positive = positive.reshape(batch_size, -1, n_channels)
+        print_once("SDT_Generator::forward [glyph] positive reshape:", positive.shape)
         positive_compact = torch.mean(positive, 1, keepdim=True)
+        print_once("SDT_Generator::forward [glyph] positive_compact:", positive_compact.shape)
         positive_compact = self.pro_mlp_character(positive_compact) # [B, 1, C]
 
         print_once("SDT_Generator::forward [glyph] NCE anc_compact:", anc_compact.shape, ", positive_compact:", positive_compact.shape)
         nce_emb_patch = torch.cat((anc_compact, positive_compact), 1) # [B, 2, C]
         nce_emb_patch = nn.functional.normalize(nce_emb_patch, p=2, dim=2)
+        print_once("SDT_Generator::forward [glyph] normalize nce_emb_patch:", nce_emb_patch.shape)
 
         # input the writer-wise & character-wise styles into the decoder
         writer_style = memory_fea[:, :batch_size, :]  # [4*N, B, C]
+        #print_once("SDT_Generator::forward writer_style:", writer_style.shape)
         glyph_style = glyph_memory[:, :batch_size]  # [4, B, N, C]
+        #print_once("SDT_Generator::forward glyph_style:", glyph_style.shape)
         glyph_style = rearrange(glyph_style, 't b n c -> (t n) b c') # [4*N, B, C]
+        #print_once("SDT_Generator::forward glyph_style after rearrange:", glyph_style.shape)
 
         # QUERY: [char_emb, seq_emb]
         seq_emb = self.SeqtoEmb(seq).permute(1, 0, 2)
