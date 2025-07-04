@@ -3,6 +3,27 @@ import torch
 import random
 from PIL import ImageDraw, Image
 
+def normalize_xys_for_brush(xys):
+    # xys: (T, 3), 절대 좌표 [x, y, eos]
+    xy = xys[:, :2]
+    eos = xys[:, 2]
+
+    # 유효한 길이 체크
+    if len(xy) < 2 or np.allclose(xy[:, 0], xy[0, 0]) and np.allclose(xy[:, 1], xy[0, 1]):
+        raise Exception("Broken online characters")
+
+    # 중심화
+    mux, muy = xy[:, 0].mean(), xy[:, 1].mean()
+    xy[:, 0] -= mux
+    xy[:, 1] -= muy
+
+    # 정규화 (스케일)
+    std = np.std(xy)
+    if std < 1e-6:
+        raise Exception("Broken online characters")
+    xy /= std
+
+    return np.concatenate([xy, eos[:, None]], axis=1)
 
 '''
 description: Normalize the xy-coordinates into a standard interval.

@@ -31,3 +31,4 @@ DATA_LOADER:
   TYPE: ScriptDataset
   PATH: /home/jinsu0000/1_git/sdt_connected_dataset/data_eng
   DATASET: ENGLISH
+  DATASET_NAME: CASIA # BRUSH

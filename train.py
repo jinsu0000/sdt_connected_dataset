@@ -4,12 +4,27 @@ from utils.util import fix_seed, load_specific_dict
 from models.loss import SupConLoss, get_pen_loss
 from models.model import SDT_Generator
 from utils.logger import set_log
+from data_loader.loader import BrushDataset
 from data_loader.loader import ScriptDataset
 import argparse
 import os
 import re
 import torch
 from trainer.trainer import Trainer
+
+def get_dataset(cfg, is_train_dataset=True):
+    if cfg.DATA_LOADER.DATASET_NAME.upper() == "BRUSH":
+        dataset = BrushDataset(
+            root_dir=cfg.DATA_LOADER.PATH
+        )
+    else:
+        dataset = ScriptDataset(
+            root=cfg.DATA_LOADER.PATH,
+            dataset=cfg.DATA_LOADER.DATASET,
+            is_train = cfg.TRAIN.ISTRAIN if is_train_dataset else cfg.TEST.ISTRAIN,
+            num_img=cfg.MODEL.NUM_IMGS
+        )
+    return dataset
 
 def main(opt):
     """ load config file into cfg"""
@@ -20,8 +35,7 @@ def main(opt):
     """ prepare log file """
     logs = set_log(cfg.OUTPUT_DIR, opt.cfg_file, opt.log_name)
     """ set dataset"""
-    train_dataset = ScriptDataset(
-        cfg.DATA_LOADER.PATH, cfg.DATA_LOADER.DATASET, cfg.TRAIN.ISTRAIN, cfg.MODEL.NUM_IMGS)
+    train_dataset = get_dataset(cfg, True)
     print('number of training images: ', len(train_dataset))
     train_loader = torch.utils.data.DataLoader(train_dataset,
                                                batch_size=cfg.TRAIN.IMS_PER_BATCH,
@@ -29,8 +43,9 @@ def main(opt):
                                                drop_last=False,
                                                collate_fn=train_dataset.collate_fn_,
                                                num_workers=cfg.DATA_LOADER.NUM_THREADS)
-    test_dataset = ScriptDataset(
-       cfg.DATA_LOADER.PATH, cfg.DATA_LOADER.DATASET, cfg.TEST.ISTRAIN, cfg.MODEL.NUM_IMGS)
+    test_dataset = get_dataset(cfg, False)
+    # est_dataset = ScriptDataset(
+    #   cfg.DATA_LOADER.PATH, cfg.DATA_LOADER.DATASET, cfg.TEST.ISTRAIN, cfg.MODEL.NUM_IMGS)
     test_loader = torch.utils.data.DataLoader(test_dataset,
                                               batch_size=cfg.TRAIN.IMS_PER_BATCH,
                                               shuffle=True,
