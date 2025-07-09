@@ -1,0 +1,33 @@
+BrushDataset Loaded 350461 samples from 136 writers.
+number of training images:  350461
+BrushDataset Loaded 88124 samples from 34 writers.
+Number of test images: 88124, Number of train images: 350461
+load content pretrained model from model_zoo/position_layer2_dim512_iter138k_test_acc0.9443.pth
+/home/jinsu0000/anaconda3/envs/sdt/lib/python3.8/site-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/home/jinsu0000/anaconda3/envs/sdt/lib/python3.8/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=ResNet18_Weights.IMAGENET1K_V1`. You can also use `weights=ResNet18_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+SDT_Generator::forward, style_imgs: torch.Size([32, 30, 1, 64, 64])
+SDT_Generator::forward, batch_size: 32 , num_imgs: 30 , in_planes: 1 , h: 64 , w: 64
+SDT_Generator::forward style_imgs.view(): torch.Size([960, 1, 64, 64])
+SDT_Generator::forward Feat_Encoder_ResNet output: torch.Size([960, 512, 2, 2])
+SDT_Generator::forward style_embe.view(): torch.Size([4, 960, 512])
+SDT_Generator::forward base_encoder output memory: torch.Size([4, 960, 512])
+SDT_Generator::forward WRITER memory: torch.Size([4, 960, 512]) , GLYPH memory: torch.Size([4, 960, 512])
+SDT_Generator::forward rearrange writer_memory: torch.Size([4, 64, 15, 512]) , glyph_memory: torch.Size([4, 64, 15, 512])
+SDT_Generator::forward [writer] memory_fea: torch.Size([60, 64, 512]) , compact_fea: torch.Size([64, 512])
+SDT_Generator::forward [writer] pro_emb: torch.Size([64, 256])
+SDT_Generator::forward [writer] query_emb: torch.Size([32, 256])
+SDT_Generator::forward [writer] pos_emb: torch.Size([32, 256])
+SDT_Generator::forward [writer] nce_emb: torch.Size([32, 2, 256])
+SDT_Generator::forward [writer] normalize NCE nce_emb: torch.Size([32, 2, 256])
+SDT_Generator::forward [glyph] patch_emb: torch.Size([4, 32, 15, 512])
+SDT_Generator::forward [glyph] random_double_sampling result anc: torch.Size([32, 15, 1, 512]) , positive: torch.Size([32, 15, 1, 512]) , n_channels: 512
+SDT_Generator::forward [glyph] anc reshape: torch.Size([32, 15, 512])
+SDT_Generator::forward [glyph] anc_compact: torch.Size([32, 1, 512])
+SDT_Generator::forward [glyph] anc_compact after pro_mlp_character: torch.Size([32, 1, 256])
+SDT_Generator::forward [glyph] positive reshape: torch.Size([32, 15, 512])
+SDT_Generator::forward [glyph] positive_compact: torch.Size([32, 1, 512])
+SDT_Generator::forward [glyph] NCE anc_compact: torch.Size([32, 1, 256]) , positive_compact: torch.Size([32, 1, 256])
+SDT_Generator::forward [glyph] normalize nce_emb_patch: torch.Size([32, 2, 256])
+Content_TR:: Feat_Encoder input: torch.Size([32, 1, 64, 64])

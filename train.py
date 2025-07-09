@@ -4,18 +4,21 @@ from utils.util import fix_seed, load_specific_dict
 from models.loss import SupConLoss, get_pen_loss
 from models.model import SDT_Generator
 from utils.logger import set_log
-from data_loader.loader import BrushDataset
 from data_loader.loader import ScriptDataset
+from data_loader.loader_brush import BrushDataset
 import argparse
 import os
 import re
 import torch
 from trainer.trainer import Trainer
+from utils.logger import print_once
 
 def get_dataset(cfg, is_train_dataset=True):
     if cfg.DATA_LOADER.DATASET_NAME.upper() == "BRUSH":
         dataset = BrushDataset(
-            root_dir=cfg.DATA_LOADER.PATH
+            root_dir=cfg.DATA_LOADER.PATH,
+            is_train = cfg.TRAIN.ISTRAIN if is_train_dataset else cfg.TEST.ISTRAIN,
+            num_img=cfg.MODEL.NUM_IMGS
         )
     else:
         dataset = ScriptDataset(
@@ -53,6 +56,8 @@ def main(opt):
                                               drop_last=False,
                                               collate_fn=test_dataset.collate_fn_,
                                               num_workers=cfg.DATA_LOADER.NUM_THREADS)
+    print_once(f"Number of test images: {len(test_dataset)}, Number of train images: {len(train_dataset)}")
+
     char_dict = test_dataset.char_dict
     """ build model, criterion and optimizer"""
     model = SDT_Generator(num_encoder_layers=cfg.MODEL.ENCODER_LAYERS,

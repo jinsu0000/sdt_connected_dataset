@@ -1,7 +1,14 @@
 import numpy as np
 import torch
+from torchvision import transforms
 import random
 from PIL import ImageDraw, Image
+
+transform_data = transforms.Compose([
+    transforms.Resize((64, 64)),        # PIL 이미지 크기 변경
+    transforms.ToTensor(),              # [H, W] → [1, H, W] & [0,1] 범위
+    transforms.Normalize((0.5,), (0.5,))# SDT와 동일하게 [-1, 1] 범위로 변환
+])
 
 def normalize_xys_for_brush(xys):
     # xys: (T, 3), 절대 좌표 [x, y, eos]

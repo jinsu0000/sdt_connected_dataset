@@ -1,6 +1,8 @@
 __pycache__
 data/*
+data_eng/*
 Saved/*
+Saved_*/*
 model_zoo/*.pth
 auto_*
 .vscode

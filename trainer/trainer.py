@@ -16,6 +16,7 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
+from utils.logger import print_once
 
 class Trainer:
     def __init__(self, model, criterion, optimizer, data_loader, 

@@ -1,121 +1,21 @@
-import os
 import random
-import pickle
+from utils.util import normalize_xys
+from torch.utils.data import Dataset
+import os
 import torch
 import numpy as np
-import lmdb
-from torch.utils.data import Dataset
+import pickle
 from torchvision import transforms
-from utils.util import normalize_xys, normalize_xys_for_brush
-
+import lmdb
+from utils.util import corrds2xys
+import codecs
+import glob
+import cv2
+from PIL import ImageDraw, Image
 transform_data = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Normalize(mean=(0.5,), std=(0.5,))
+    transforms.Normalize(mean = (0.5), std = (0.5))
 ])
-
-def delta_to_absolute(traj):
-    # traj: (T, 3) or (T, N), with first 2 columns = dx, dy
-    abs_xy = np.cumsum(traj[:, :2], axis=0)
-    rest = traj[:, 2:] if traj.shape[1] > 2 else None
-    return np.concatenate([abs_xy, rest], axis=1) if rest is not None else abs_xy
-
-class BrushDataset(Dataset):
-    def __init__(self, root_dir, mode='train', split_ratio=0.8, seed=42, max_len=150):
-        self.root_dir = os.path.join(root_dir, 'BRUSH', 'char_pickles')
-        self.max_len = max_len
-        self.samples = []
-
-        # English_content.pkl 로드
-        content_path = os.path.join(root_dir, 'BRUSH', 'English_content.pkl')
-        with open(content_path, 'rb') as f:
-            self.content_dict = pickle.load(f)
-
-        # 작가 pkl 목록 나누기
-        writer_files = [f for f in os.listdir(self.root_dir) if f.endswith('.pkl')]
-        writer_files.sort()
-        random.seed(seed)
-        random.shuffle(writer_files)
-        split_idx = int(len(writer_files) * split_ratio)
-        if mode == 'train':
-            writer_files = writer_files[:split_idx]
-        else:
-            writer_files = writer_files[split_idx:]
-
-        for writer_file in writer_files:
-            writer_id = os.path.splitext(writer_file)[0]
-            with open(os.path.join(self.root_dir, writer_file), 'rb') as f:
-                char_dict = pickle.load(f)
-                for char, sample_list in char_dict.items():
-                    for sample in sample_list:
-                        traj = sample['trajectory'].astype(np.float32)  # delta
-                        traj = delta_to_absolute(traj)
-
-                        # 🛠 Broken traj 제거 (동일한 점만 있거나 너무 짧음)
-                        if traj.shape[0] < 2:
-                            continue
-                        if np.allclose(traj[:, 0], traj[0, 0]) and np.allclose(traj[:, 1], traj[0, 1]):
-                            continue
-
-                        try:
-                            traj = normalize_xys_for_brush(traj)
-                        except Exception as e:
-                            print(f"[normalize_xys ERROR] char={char}, writer={writer_id}, msg={str(e)}")
-                            continue
-                        traj[1:, :2] -= traj[:-1, :2]
-
-                        if char not in self.content_dict:
-                            continue
-                        content_img = self.content_dict[char]
-                        #content_img = torch.tensor(content_img / 255.0, dtype=torch.float32)
-                        content_img = transform_data(content_img)
-
-                        self.samples.append({
-                            'coords': torch.tensor(traj),
-                            'char_img': content_img,
-                            'writer_id': writer_id,
-                            'character': char,
-                            'connection': sample.get("connection", "isolated"),
-                            'sentence_id': sample.get("sentence_id", ""),
-                            'cursor': sample.get("cursor", -1)
-                        })
-
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, idx):
-        return self.samples[idx]
-
-    def collate_fn_(self, batch_data):
-        bs = len(batch_data)
-        max_len = max([s['coords'].shape[0] for s in batch_data]) + 1
-        output = {
-            'coords': torch.zeros((bs, max_len, 5)),
-            'coords_len': torch.zeros((bs,)),
-            'character_id': torch.zeros((bs,)),
-            'writer_id': torch.zeros((bs,)),
-            'img_list': [],
-            'char_img': [],
-            'img_label': []
-        }
-        output['coords'][:, :, -1] = 1  # pen-end state
-
-        for i in range(bs):
-            s = batch_data[i]['coords'].shape[0]
-            output['coords'][i, :s] = batch_data[i]['coords']
-            output['coords'][i, 0, :2] = 0
-            output['coords_len'][i] = s
-            output['character_id'][i] = 0  # placeholder
-            output['writer_id'][i] = 0     # placeholder
-            output['img_list'].append(batch_data[i]['char_img'].unsqueeze(0))
-            output['char_img'].append(batch_data[i]['char_img'])
-            output['img_label'].append(batch_data[i]['character'])
-
-        output['img_list'] = torch.stack(output['img_list'], 0)
-        output['char_img'] = torch.stack(output['char_img'], 0).unsqueeze(1)
-
-        return output
-    
-
 
 script={"CHINESE":['CASIA_CHINESE', 'Chinese_content.pkl'],
         'JAPANESE':['TUATHANDS_JAPANESE', 'Japanese_content.pkl'],
