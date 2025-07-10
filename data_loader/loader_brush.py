@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 from utils.util import normalize_xys_for_brush
 from utils.logger import print_once
+from tqdm import tqdm
 
 
 def delta_to_absolute(traj):
@@ -25,6 +26,15 @@ class CharDict:
 
     def get_char(self, idx):
         return self.id2char[idx]
+
+    def __getitem__(self, idx):
+        return self.get_char(idx)
+    
+    def __len__(self):
+        return len(self.char2id)
+
+    def __contains__(self, item):
+        return item in self.char2id
 
 
 transform_data = transforms.Compose([
@@ -51,7 +61,9 @@ class BrushDataset(Dataset):
         split_idx = int(len(writer_files) * split_ratio)
         writer_files = writer_files[:split_idx] if is_train else writer_files[split_idx:]
 
-        for writer_file in writer_files:
+        self.writer_dict = {os.path.splitext(f)[0]: idx for idx, f in enumerate(writer_files)}
+        print_once(f"BrushDataset initialized [{'TRAIN' if is_train else 'TEST'}] with {len(writer_files)} writers, split at {split_ratio * 100:.1f}%.")
+        for writer_file in tqdm(writer_files, desc="Loading BrushDataset"):
             writer_id = os.path.splitext(writer_file)[0]
             with open(os.path.join(self.char_root_dir, writer_file), 'rb') as f:
                 writer_dict = pickle.load(f)
@@ -68,7 +80,8 @@ class BrushDataset(Dataset):
 
                     try:
                         traj = normalize_xys_for_brush(traj)
-                    except Exception:
+                    except Exception as e:
+                        print_once(f"[Warn] Normalize 실패: {e}")
                         continue
                     traj[1:, :2] -= traj[:-1, :2]
 
@@ -122,7 +135,7 @@ class BrushDataset(Dataset):
             output['coords'][i, :s, 2:] = coords[:, 2:]
             output['coords_len'][i] = s
             output['character_id'][i] = self.char_dict.find(batch_data[i]['character'])
-            output['writer_id'][i] = 0
+            output['writer_id'][i] = self.writer_dict[batch_data[i]['writer_id']]
 
             all_candidates = [s for s in self.samples if s['writer_id'] == batch_data[i]['writer_id']]
             sampled_imgs = random.sample(all_candidates, min(self.num_img, len(all_candidates)))
